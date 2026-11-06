@@ -260,6 +260,12 @@ class DownloadMixin:
         media_type = self._effective_media_type()
         selected_langs = self.get_selected_subtitle_codes()
         selected_langs = self.get_selected_subtitle_codes()
+        # Subtitles are only downloaded when the Type "Subtitles" checkbox is
+        # checked. If it's unchecked, language selections are ignored: no
+        # --write-subs is passed to yt-dlp, no subtitle existence check, no
+        # subtitle post-processing, and no subtitle cleanup.
+        if not self.video_state.get("wants_subtitles", False):
+            selected_langs = []
         base_path = self.get_full_path()
 
         # 1. Check Media (Video/Audio)

@@ -621,6 +621,7 @@ class TestBuildCommandAudio(unittest.TestCase):
 
     def test_sub_langs_cover_rumble_keys(self):
         h = self.Harness(audio_fmt="best")
+        h.video_state["wants_subtitles"] = True
         cmd = h.build_command(selected_langs=["en"])
         idx = cmd.index("--sub-langs")
         self.assertEqual(cmd[idx + 1], "en,a.en,en-auto,a.en-auto")
@@ -629,6 +630,7 @@ class TestBuildCommandAudio(unittest.TestCase):
         # ARD/ZDF key German subtitles "deu" (ISO 639-2); --sub-langs must
         # include that shape, "de" alone would fullmatch nothing there.
         h = self.Harness(audio_fmt="best")
+        h.video_state["wants_subtitles"] = True
         cmd = h.build_command(selected_langs=["de"])
         idx = cmd.index("--sub-langs")
         self.assertEqual(

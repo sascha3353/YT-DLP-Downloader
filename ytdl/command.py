@@ -272,7 +272,9 @@ class CommandMixin:
         cmd.extend(["--no-playlist", "-N", "8"])
         cmd.extend(["--write-info-json"])
         # Subtitles Integration
-        if selected_langs:
+        # Subtitles are only downloaded when the Type "Subtitles" checkbox is
+        # checked (wants_subtitles). Language checkboxes alone are not enough.
+        if self.video_state.get("wants_subtitles", False) and selected_langs:
             lang_arg = self._subtitle_lang_patterns(selected_langs)
             cmd.extend(
                 [

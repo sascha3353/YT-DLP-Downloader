@@ -791,6 +791,23 @@ class UiBuildMixin:
         ):
             self._auto_select_subtitles()
 
+        # When the user checks the Type "Subtitles" checkbox without having
+        # picked a language yet, pre-select the first selectable language so
+        # the subtitle download actually has a target. Only auto-checks: if
+        # at least one language is already chosen we leave it alone, and we
+        # never auto-uncheck. The language checkbox's stateChanged then runs
+        # _update_subtitle_warning, which sees the type checkbox already
+        # checked and does nothing, so there is no feedback loop.
+        if (
+            cb is self.subtitles_checkbox
+            and cb.isChecked()
+            and not any(c.isChecked() for c in self.subtitle_checkboxes.values())
+        ):
+            for lang_cb in self.subtitle_checkboxes.values():
+                if lang_cb.isEnabled():
+                    lang_cb.setChecked(True)
+                    break
+
     def _update_type_checkbox_enable_state(self):
         """Dynamic enabling/disabling of Type checkboxes based on each other's
         state.

@@ -26,6 +26,10 @@ disagree, this file is right.
 
 ---
 
+## 1.5.10 — 2026-11-06
+
+- **Subtitles only download when the Type "Subtitles" checkbox is on.** Checking a subtitle language (English/German/Spanish) no longer downloads subtitles by itself — the Type group's "Subtitles" checkbox must also be checked. When you check "Subtitles" with no language chosen yet, the first selectable language is pre-selected so the download has a target.
+
 ## 1.5.9 — 2026-10-29
 
 - **Show Info thumbnail tries a fallback when the source URL 404s.** Some YouTube
