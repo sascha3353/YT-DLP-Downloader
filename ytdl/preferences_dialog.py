@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QDialog,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QPushButton,
     QPlainTextEdit,
@@ -23,17 +24,19 @@ _FORM_OWNED_KEYS = frozenset({
     "cookies_from_browser_enabled",
     "strip_bracketed_soundcues",
     "show_fetchinfo_command",
+    "pause_threshold_ms",
 })
 
 
 def _form_supplied(key, cookie_enabled, cookie_browser, strip_soundcues,
-                   show_fetchinfo):
+                   show_fetchinfo, pause_threshold):
     """Whether the form widget that owns `key` was passed in."""
     widgets = {
         "cookies_from_browser": cookie_browser,
         "cookies_from_browser_enabled": cookie_enabled,
         "strip_bracketed_soundcues": strip_soundcues,
         "show_fetchinfo_command": show_fetchinfo,
+        "pause_threshold_ms": pause_threshold,
     }
     return widgets.get(key) is not None
 
@@ -110,6 +113,38 @@ class PreferencesDialogMixin:
         cookie_row.addStretch(1)
         layout.addLayout(cookie_row)
 
+        # Pause threshold: the gap (ms) between spoken phrases that breaks a
+        # subtitle cue into two. A line edit so the user can type any number.
+        pause_row = QHBoxLayout()
+        pause_row.setContentsMargins(0, 0, 0, 0)
+        pause_row.setSpacing(6)
+        pause_label = QLabel("pause_threshold_ms")
+        pause_label.setToolTip(prefs.TOOLTIP_PAUSE_THRESHOLD_MS)
+        pause_row.addWidget(pause_label)
+        pause_threshold = QLineEdit()
+        pause_threshold.setPlaceholderText("2000")
+        pause_threshold.setObjectName("pause_threshold_ms")
+        pause_threshold.setToolTip(prefs.TOOLTIP_PAUSE_THRESHOLD_MS)
+        pause_threshold.setFixedWidth(100)
+        pause_threshold.setStyleSheet("""
+            QLineEdit {
+                padding: 0;
+                border: 1px solid #525252;
+                border-radius: 0;
+                background-color: #383838;
+                color: #fff;
+            }
+            QLineEdit:focus {
+                border: 1px solid #777;
+            }
+            QLineEdit:disabled {
+                color: #999;
+            }
+        """)
+        pause_row.addWidget(pause_threshold)
+        pause_row.addStretch(1)
+        layout.addLayout(pause_row)
+
         # The two standalone switches, each on its own line, directly in the
         # dialog (no group frame, like the cookies row).
         layout.addWidget(strip_soundcues)
@@ -164,6 +199,7 @@ class PreferencesDialogMixin:
         cookie_browser.setText(browser if isinstance(browser, str) else "")
         strip_soundcues.setChecked(prefs.strip_bracketed_soundcues(current))
         show_fetchinfo.setChecked(prefs.show_fetchinfo_command(current))
+        pause_threshold.setText(str(prefs.pause_threshold_ms(current)))
 
         cookie_browser.setEnabled(cookie_enabled.isChecked())
         cookie_enabled.toggled.connect(cookie_browser.setEnabled)
@@ -175,7 +211,7 @@ class PreferencesDialogMixin:
         save_button.clicked.connect(
             lambda: self._save_preferences(
                 dialog, text_edit, cookie_enabled, cookie_browser,
-                strip_soundcues, show_fetchinfo,
+                strip_soundcues, show_fetchinfo, pause_threshold,
             )
         )
         button_layout.addWidget(save_button, 1)
@@ -208,7 +244,7 @@ class PreferencesDialogMixin:
 
     def _save_preferences(self, dialog, text_edit, cookie_enabled=None,
                           cookie_browser=None, strip_soundcues=None,
-                          show_fetchinfo=None):
+                          show_fetchinfo=None, pause_threshold=None):
         """Validate and save the edited preferences JSON.
 
         The form is authoritative for the switches it owns (the browser
@@ -233,6 +269,13 @@ class PreferencesDialogMixin:
                 parsed["strip_bracketed_soundcues"] = bool(strip_soundcues.isChecked())
             if show_fetchinfo is not None:
                 parsed["show_fetchinfo_command"] = bool(show_fetchinfo.isChecked())
+            if pause_threshold is not None:
+                text = pause_threshold.text().strip()
+                if text:
+                    try:
+                        parsed["pause_threshold_ms"] = int(text)
+                    except ValueError:
+                        raise ValueError("pause_threshold_ms must be a number (milliseconds)")
 
             # The channel name map comes from the JSON editor. It is set
             # before the carry-over below, so an editor that omits it means
@@ -251,7 +294,8 @@ class PreferencesDialogMixin:
                     continue
                 if key in _FORM_OWNED_KEYS:
                     if _form_supplied(key, cookie_enabled, cookie_browser,
-                                      strip_soundcues, show_fetchinfo):
+                                      strip_soundcues, show_fetchinfo,
+                                      pause_threshold):
                         continue
                 parsed[key] = value
 
@@ -276,6 +320,14 @@ class PreferencesDialogMixin:
             if "show_fetchinfo_command" in parsed:
                 if not isinstance(parsed["show_fetchinfo_command"], bool):
                     raise ValueError("show_fetchinfo_command must be true or false")
+
+            # Validate pause_threshold_ms
+            if "pause_threshold_ms" in parsed:
+                raw = parsed["pause_threshold_ms"]
+                if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+                    raise ValueError("pause_threshold_ms must be a number (milliseconds)")
+                if raw < 0:
+                    raise ValueError("pause_threshold_ms must be zero or greater")
 
             # Write to file
             os.makedirs(prefs.PREFERENCES_DIR, exist_ok=True)

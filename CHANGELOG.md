@@ -26,6 +26,10 @@ disagree, this file is right.
 
 ---
 
+## 1.5.12 — 2026-11-09
+
+- **Pause threshold is now settable in Preferences.** The “Pause threshold ms” field (below “cookies from browser”) controls how long a silence between spoken phrases must be before a subtitle cue breaks into two — default 2000 ms, set to 0 to disable pause-based splitting.
+
 ## 1.5.11 — 2026-11-09
 
 - **Subtitle pauses show a blank gap.** A long silence between spoken phrases in downloaded subtitles now leaves the screen blank until the next phrase appears, instead of the previous subtitle lingering through the whole pause.
