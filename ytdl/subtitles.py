@@ -20,6 +20,9 @@ from ytdl.utils import (
 
 logger = logging.getLogger(__name__)
 
+# UI display names for subtitle language codes, used in checkbox labels.
+LANG_NAMES = {"en": "English", "de": "German", "es": "Spanish"}
+
 
 def _looks_like_subtitle_file(path: str) -> bool:
     """Return True if `path` looks like an app-written subtitle file.
@@ -71,8 +74,7 @@ class SubtitleMixin:
         for code, cb in self.subtitle_checkboxes.items():
             # Update label
             status = available.get(code)
-            lang_names = {"en": "English", "de": "German", "es": "Spanish"}
-            name = lang_names.get(code, code)
+            name = LANG_NAMES.get(code, code)
 
             if status:
                 cb.setText(f"{name} ({status})")
@@ -98,16 +100,13 @@ class SubtitleMixin:
         self._update_subtitle_warning()
 
     def _auto_select_subtitles(self):
-        # Identify types
-        real_codes = []
-        available_codes = []
-
-        for code, cb in self.subtitle_checkboxes.items():
-            text = cb.text().lower()
-            if "(real)" in text:
-                real_codes.append(code)
-            if "(none)" not in text and cb.isEnabled():
-                available_codes.append(code)
+        # Available subtitles come from video_state (set during info fetch),
+        # keyed by UI language code with values like "real", "auto", or None
+        # when unavailable. This avoids parsing checkbox label text, which is
+        # fragile if the wording ever changes.
+        available = self.video_state.get("available_subtitles", {})
+        real_codes = [code for code, status in available.items() if status == "real"]
+        available_codes = [code for code, status in available.items() if status]
 
         # Apply selection rules
         if real_codes:
@@ -140,7 +139,8 @@ class SubtitleMixin:
                 alias for alias, base in SUBTITLE_LANG_ALIASES.items() if base == lang
             ]
             for key in keys:
-                variants.extend([key, f"a.{key}", f"{key}-auto", f"a.{key}-auto"])
+                escaped_key = re.escape(key)
+                variants.extend([key, f"a.{escaped_key}", f"{key}-auto", f"a.{escaped_key}-auto"])
         return ",".join(variants)
 
     def _subtitle_type_for_file(self, lang, marked_auto):
@@ -574,18 +574,7 @@ class SubtitleMixin:
             block = f"{i}\n{time_line}\n{sub['text']}"
             resynced_blocks.append(block)
 
-        # Write beside the destination and replace atomically
-        temp_path = f"{output_path}.tmp"
-        try:
-            with open(temp_path, "w", encoding="utf-8") as f:
-                f.write("\n\n".join(resynced_blocks) + "\n")
-            os.replace(temp_path, output_path)
-        except OSError:
-            try:
-                os.remove(temp_path)
-            except OSError:
-                pass
-            raise
+        self._write_srt(resynced_blocks, output_path)
 
         lines_out.append("💬 Subtitles merged.")
 
@@ -694,7 +683,7 @@ class SubtitleMixin:
             and sub["end"] - sub["start"] >= 0.15
         ]
 
-        logger.debug(f"Adjusted {len(adjusted_subtitles)} subtitle cues")
+        logger.debug("Adjusted %s subtitle cues", len(adjusted_subtitles))
 
         # The 0.15s floor is the first of two places that can drop a cue, and
         # it does so silently - counted here for the summary line below.
@@ -722,22 +711,7 @@ class SubtitleMixin:
             block = f"{i}\n{time_line}\n{sub['text']}"
             resynced_blocks.append(block)
 
-        # Write beside the destination and replace atomically so a failed write
-        # never truncates the original subtitle file. Blocks are joined by a
-        # blank line and the file ends with a newline: that is the shape an SRT
-        # is expected to have, and a parser can drop a trailing block that has
-        # none.
-        temp_path = f"{output_path}.tmp"
-        try:
-            with open(temp_path, "w", encoding="utf-8") as f:
-                f.write("\n\n".join(resynced_blocks) + "\n")
-            os.replace(temp_path, output_path)
-        except OSError:
-            try:
-                os.remove(temp_path)
-            except OSError:
-                pass
-            raise
+        self._write_srt(resynced_blocks, output_path)
 
         lines_out.append("💬 Subtitles merged.")
 
@@ -914,6 +888,27 @@ class SubtitleMixin:
             current["end"] = end
             fixed.append(current)
         return fixed, dropped
+
+    def _write_srt(self, blocks: list, output_path: str) -> None:
+        """Write SRT cue blocks to `output_path` atomically.
+
+        `blocks` is a list of already-formatted SRT block strings
+        ("1\\nHH:MM:SS,mmm --> HH:MM:SS,mmm\\ntext"). They are joined with a
+        blank line and the file ends with a newline. The write goes to a
+        `.tmp` file beside the destination and is moved with os.replace(), so
+        a failed write never truncates the original subtitle file.
+        """
+        temp_path = f"{output_path}.tmp"
+        try:
+            with open(temp_path, "w", encoding="utf-8") as f:
+                f.write("\n\n".join(blocks) + "\n")
+            os.replace(temp_path, output_path)
+        except OSError:
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+            raise
 
     def _format_subtitles_for_display(self, subtitles):
         """Lay out parsed cues for display: the YouTube player's look, two lines.

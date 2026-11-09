@@ -913,7 +913,7 @@ class DownloadMixin:
                     start = seg.get('start', 0)
                     end = seg.get('end', 0)
                     segment_info.append(f"{category} ({start:.1f}s-{end:.1f}s)")
-                logger.debug(f"SponsorBlock marked: {', '.join(segment_info)}")
+                logger.debug("SponsorBlock marked: %s", ", ".join(segment_info))
 
             # Log the result. The URL is logged whole, like every other log
             # path: it is the only thing that identifies which job this was,
