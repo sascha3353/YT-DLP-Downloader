@@ -26,6 +26,10 @@ disagree, this file is right.
 
 ---
 
+## 1.5.16 — 2026-11-09
+
+- Version bump.
+
 ## 1.5.15 — 2026-11-09
 
 - **JSON3 subtitle path gets the same safety nets as SRT.** Zero-duration cues (missing `dDurationMs`) are now dropped at the 0.15s floor, and the final overlap guard runs on the JSON3 layout output too — so neither path can write overlapping or zero-length subtitle cues.
