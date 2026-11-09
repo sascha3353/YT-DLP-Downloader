@@ -140,7 +140,10 @@ class SubtitleMixin:
             ]
             for key in keys:
                 escaped_key = re.escape(key)
-                variants.extend([key, f"a.{escaped_key}", f"{key}-auto", f"a.{escaped_key}-auto"])
+                variants.extend(
+                    [escaped_key, f"a.{escaped_key}",
+                     f"{escaped_key}-auto", f"a.{escaped_key}-auto"]
+                )
         return ",".join(variants)
 
     def _subtitle_type_for_file(self, lang, marked_auto):
@@ -520,26 +523,6 @@ class SubtitleMixin:
             )
             return False, lines_out
 
-        # Drop cues with no usable duration. Timestamps are the source ones —
-        # a missing dDurationMs defaults to 0, which would otherwise produce
-        # zero-length cues that _cue_from_lines silently pads to min_dur.
-        # Mirror the SRT path's 0.15s floor so both paths behave identically.
-        too_short_cues = 0
-        adjusted_subtitles = []
-        for sub in subtitle_lines:
-            dur = sub["end"] - sub["start"]
-            if sub["start"] >= 0 and sub["end"] > sub["start"] and dur >= 0.15:
-                adjusted_subtitles.append(sub)
-            else:
-                too_short_cues += 1
-        subtitle_lines = adjusted_subtitles
-
-        if not subtitle_lines:
-            lines_out.append(
-                "⚠️ No valid subtitle cues found; keeping the original file"
-            )
-            return False, lines_out
-
         # Pause-aware layout: break cues at long speech pauses
         pause_ms = pause_threshold_ms()
         merged_subtitles, layout_stats = pause_aware_cues(
@@ -589,7 +572,6 @@ class SubtitleMixin:
                 counters={
                     "two_line": two_line_cues,
                     "dropped": layout_stats.get("dropped", 0),
-                    "too_short": too_short_cues,
                 },
                 name=os.path.basename(output_path),
             )
