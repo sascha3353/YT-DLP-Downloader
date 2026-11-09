@@ -26,6 +26,10 @@ disagree, this file is right.
 
 ---
 
+## 1.5.15 — 2026-11-09
+
+- **JSON3 subtitle path gets the same safety nets as SRT.** Zero-duration cues (missing `dDurationMs`) are now dropped at the 0.15s floor, and the final overlap guard runs on the JSON3 layout output too — so neither path can write overlapping or zero-length subtitle cues.
+
 ## 1.5.14 — 2026-11-09
 
 - **Pause threshold moved below Show Info.** The “Pause threshold ms” field now sits below the “show_fetchinfo_command” checkbox in the Preferences dialog, after the three switches, instead of directly under the cookies row.

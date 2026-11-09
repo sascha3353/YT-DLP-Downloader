@@ -476,11 +476,42 @@ class SubtitleMixin:
             )
             return False, lines_out
 
+        # Drop cues with no usable duration. Timestamps are the source ones —
+        # a missing dDurationMs defaults to 0, which would otherwise produce
+        # zero-length cues that _cue_from_lines silently pads to min_dur.
+        # Mirror the SRT path's 0.15s floor so both paths behave identically.
+        too_short_cues = 0
+        adjusted_subtitles = []
+        for sub in subtitle_lines:
+            dur = sub["end"] - sub["start"]
+            if sub["start"] >= 0 and sub["end"] > sub["start"] and dur >= 0.15:
+                adjusted_subtitles.append(sub)
+            else:
+                too_short_cues += 1
+        subtitle_lines = adjusted_subtitles
+
+        if not subtitle_lines:
+            lines_out.append(
+                "⚠️ No valid subtitle cues found; keeping the original file"
+            )
+            return False, lines_out
+
         # Pause-aware layout: break cues at long speech pauses
         pause_ms = pause_threshold_ms()
         merged_subtitles, layout_stats = pause_aware_cues(
             subtitle_lines, pause_threshold_ms=pause_ms
         )
+
+        # Final overlap guard — same safety net the SRT path applies via
+        # _format_subtitles_for_display(). pause_aware_cues() is designed to
+        # produce non-overlapping cues, but this catches any edge case where
+        # overlapping source events slip through.
+        fixed, dropped = self._fix_subtitle_time_overlaps(merged_subtitles)
+        layout_stats["dropped"] = layout_stats.get("dropped", 0) + len(dropped)
+        layout_stats["dropped_cues"] = (
+            (layout_stats.get("dropped_cues") or []) + dropped
+        )
+        merged_subtitles = fixed
 
         if not merged_subtitles:
             logger.warning(
@@ -525,6 +556,7 @@ class SubtitleMixin:
                 counters={
                     "two_line": two_line_cues,
                     "dropped": layout_stats.get("dropped", 0),
+                    "too_short": too_short_cues,
                 },
                 name=os.path.basename(output_path),
             )
