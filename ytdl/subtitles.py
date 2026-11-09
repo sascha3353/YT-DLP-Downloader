@@ -365,9 +365,9 @@ class SubtitleMixin:
         parse/layout/write happens off-thread and the lines are queued for the
         main thread to print.
 
-        Subtitles can arrive either as SRT (legacy) or JSON3 (per-word
-        timestamps from YouTube's timedtext API). JSON3 is parsed into line
-        units with per-word timing, then passed through `pause_aware_cues()`
+        Subtitles can arrive either as SRT (legacy) or JSON3 (timedtext
+        captions from YouTube's timedtext API). JSON3 is parsed into line
+        units with line-level timing, then passed through `pause_aware_cues()`
         which breaks cues at long speech pauses (> pause_threshold_ms). SRT
         uses the existing rolling_cues() path unchanged.
         """
@@ -378,7 +378,7 @@ class SubtitleMixin:
 
         try:
             with open(srt_path, "r", encoding="utf-8") as f:
-                content_json3 = f.read()
+                content = f.read()
         except (OSError, UnicodeError) as e:
             logger.warning("Could not read subtitle file %s: %s", srt_path, e)
             lines_out.append(
@@ -390,11 +390,11 @@ class SubtitleMixin:
         # pause_aware_cues(); SRT files use the existing rolling_cues() path.
         if srt_path.lower().endswith(".json3"):
             return self._resync_json3_subtitles(
-                content_json3, srt_path, output_path, lines_out
+                content, srt_path, output_path, lines_out
             )
 
         return self._resync_srt_subtitles(
-            content_json3, srt_path, output_path, lines_out
+            content, srt_path, output_path, lines_out
         )
 
     def _parse_json3_subtitles(self, content: str) -> list:
@@ -443,6 +443,8 @@ class SubtitleMixin:
                     {"start": start_sec, "end": end_sec, "text": text}
                 )
 
+        # Sort by start time so pause_aware_cues() sees a monotonic timeline.
+        lines_out.sort(key=lambda sub: sub["start"])
         return lines_out
 
     def _resync_json3_subtitles(
@@ -577,7 +579,6 @@ class SubtitleMixin:
         normalized_content = content.replace("\r\n", "\n").replace("\r", "\n")
         blocks = re.split(r"\n\s*\n", normalized_content.strip())
         subtitles = []
-        max_time = 0
         no_text_cues = 0
 
         # One decision per file, so a run can never come out half-stripped if
@@ -611,8 +612,6 @@ class SubtitleMixin:
             start_str, end_str = match.groups()
             start_sec = parse_srt_time(start_str)
             end_sec = parse_srt_time(end_str)
-
-            max_time = max(max_time, end_sec)
 
             # Everything after the timestamp is the cue text; a block may
             # carry more than one line, and the first of those is the text

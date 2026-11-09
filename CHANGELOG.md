@@ -26,6 +26,10 @@ disagree, this file is right.
 
 ---
 
+## 1.5.17 — 2026-11-09
+
+- **Subtitle fixes.** The JSON3 parser now sorts lines by start time (as its docstring already promised), its docstrings no longer claim per-word timing (only line-level timestamps are read), the unused `max_time` variable in the SRT path is gone, and the file-content variable in `resync_subtitles` was renamed from `content_json3` to `content` since it holds both SRT and JSON3 content.
+
 ## 1.5.16 — 2026-11-09
 
 - Version bump.
