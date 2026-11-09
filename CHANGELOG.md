@@ -26,6 +26,10 @@ disagree, this file is right.
 
 ---
 
+## 1.5.13 — 2026-11-09
+
+- **Pause threshold field matches the other text fields.** The “Pause threshold ms” line edit now uses the same font size as the “cookies from browser” field next to it.
+
 ## 1.5.12 — 2026-11-09
 
 - **Pause threshold is now settable in Preferences.** The “Pause threshold ms” field (below “cookies from browser”) controls how long a silence between spoken phrases must be before a subtitle cue breaks into two — default 2000 ms, set to 0 to disable pause-based splitting.

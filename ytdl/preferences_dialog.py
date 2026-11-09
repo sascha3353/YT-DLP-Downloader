@@ -133,6 +133,7 @@ class PreferencesDialogMixin:
                 border-radius: 0;
                 background-color: #383838;
                 color: #fff;
+                """ + font_rule + """
             }
             QLineEdit:focus {
                 border: 1px solid #777;
