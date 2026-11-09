@@ -26,6 +26,10 @@ disagree, this file is right.
 
 ---
 
+## 1.5.18 — 2026-11-09
+
+- **Subtitle robustness fixes.** JSON3 subtitles no longer drop text from zero-duration events, the JSON3 parser skips events without a start time instead of placing a bogus cue at the file start, malformed JSON3 (non-object) is ignored instead of crashing, and blank lines inside JSON3 cue text no longer split an SRT block. Subtitle language auto-selection now reads from the info fetch rather than parsing checkbox labels, and all subtitle key patterns are escaped consistently. A user-made bare subtitle file is no longer deleted by the superseded-file cleanup.
+
 ## 1.5.17 — 2026-11-09
 
 - **Subtitle fixes.** The JSON3 parser now sorts lines by start time (as its docstring already promised), its docstrings no longer claim per-word timing (only line-level timestamps are read), the unused `max_time` variable in the SRT path is gone, and the file-content variable in `resync_subtitles` was renamed from `content_json3` to `content` since it holds both SRT and JSON3 content.
