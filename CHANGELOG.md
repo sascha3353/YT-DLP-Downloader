@@ -26,6 +26,10 @@ disagree, this file is right.
 
 ---
 
+## 1.5.11 — 2026-11-09
+
+- **Subtitle pauses show a blank gap.** A long silence between spoken phrases in downloaded subtitles now leaves the screen blank until the next phrase appears, instead of the previous subtitle lingering through the whole pause.
+
 ## 1.5.10 — 2026-11-06
 
 - **Subtitles only download when the Type "Subtitles" checkbox is on.** Checking a subtitle language (English/German/Spanish) no longer downloads subtitles by itself — the Type group's "Subtitles" checkbox must also be checked. When you check "Subtitles" with no language chosen yet, the first selectable language is pre-selected so the download has a target.

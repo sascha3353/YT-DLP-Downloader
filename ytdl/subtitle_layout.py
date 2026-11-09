@@ -179,9 +179,12 @@ def pause_aware_cues(lines, pause_threshold_ms=PAUSE_THRESHOLD_MS_DEFAULT,
         gap = curr["start"] - prev["end"]
 
         if gap > threshold_s:
-            # Long pause: close current cue, start a fresh one.
-            # End at curr's start so cues never overlap.
-            laid_out.append(_cue_from_lines(current_cue, min_dur, end_override=curr["start"]))
+            # Long pause: close current cue at its own last line's end so a
+            # blank gap appears on screen until the next phrase starts.
+            # Ending at curr["start"] would swallow the pause; instead end at
+            # the last line's own end (a pause means curr.start > prev.end, so
+            # this can never overlap with the next cue).
+            laid_out.append(_cue_from_lines(current_cue, min_dur))
             current_cue = [curr]
         elif len(current_cue) >= 2:
             # Cue is full (two lines) - close it even without a pause.
