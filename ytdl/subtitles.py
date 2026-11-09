@@ -21,6 +21,22 @@ from ytdl.utils import (
 logger = logging.getLogger(__name__)
 
 
+def _looks_like_subtitle_file(path: str) -> bool:
+    """Return True if `path` looks like an app-written subtitle file.
+
+    Checks the first bytes for a cue number followed by a timestamp line
+    with "-->", which is the SRT shape this app always writes. A bare file
+    that doesn't match is left alone — it may be a file the user made
+    themselves.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            head = f.read(200)
+    except (OSError, UnicodeError):
+        return False
+    return bool(re.match(r"^\s*\d+\s*\n", head)) and "-->" in head
+
+
 class SubtitleMixin:
     def get_selected_subtitle_codes(self):
         return [code for code, cb in self.subtitle_checkboxes.items() if cb.isChecked()]
@@ -298,12 +314,18 @@ class SubtitleMixin:
         content, and the leftover's language can no longer be read from its
         name, so it is removed rather than silently duplicating a track.
 
+        A bare file that doesn't look like an app-written subtitle (no cue
+        number + timestamp) is left alone — it may be a file the user made
+        themselves.
+
         Returns the removed path, or None if there was nothing to remove.
         """
         removed = None
         for extension in (".srt", ".vtt", ".json3"):
             path = self.get_full_path(extension)
             if not os.path.isfile(path):
+                continue
+            if not _looks_like_subtitle_file(path):
                 continue
             try:
                 os.remove(path)
@@ -344,6 +366,11 @@ class SubtitleMixin:
         _ok, lines = self.resync_subtitles(srt_path, output_srt)
         for line in lines:
             self._emit("append_output", line)
+        if not _ok:
+            self._emit(
+                "append_output",
+                f"🚩 Subtitle resync failed for {lang}; original {os.path.basename(srt_path)} kept.",
+            )
 
     def resync_subtitles(self, srt_path, output_path):
         """Lay out a downloaded subtitle file and write it to output_path.
@@ -414,12 +441,20 @@ class SubtitleMixin:
         except json.JSONDecodeError as e:
             logger.warning("Could not parse JSON3 subtitle file: %s", e)
             return []
+        if not isinstance(data, dict):
+            logger.warning(
+                "JSON3 subtitle file is not an object — ignoring"
+            )
+            return []
 
         events = data.get("events", [])
         lines_out = []
 
         for ev in events:
-            start_ms = ev.get("tStartMs", 0)
+            start_ms = ev.get("tStartMs")
+            if start_ms is None:
+                # No start time — can't place this cue, skip it.
+                continue
             dur_ms = ev.get("dDurationMs", 0)
             end_ms = start_ms + dur_ms
 
@@ -471,6 +506,13 @@ class SubtitleMixin:
                 sub["text"] = self._strip_nonspoken_brackets(sub["text"])
             # Drop lines that became empty after stripping
             subtitle_lines = [s for s in subtitle_lines if s["text"].strip()]
+
+        # Normalize internal blank lines so cue text can't split an SRT block.
+        # JSON3 segs can carry "\n" (e.g. an empty segment); a blank line inside
+        # a cue would split the SRT block into two cues. Collapse blank lines
+        # regardless of the strip preference so output is consistent.
+        for sub in subtitle_lines:
+            sub["text"] = re.sub(r"\n\s*\n", "\n", sub["text"]).strip()
 
         if not subtitle_lines:
             lines_out.append(
