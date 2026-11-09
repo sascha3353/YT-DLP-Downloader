@@ -113,6 +113,11 @@ class PreferencesDialogMixin:
         cookie_row.addStretch(1)
         layout.addLayout(cookie_row)
 
+        # The two standalone switches, each on its own line, directly in the
+        # dialog (no group frame, like the cookies row).
+        layout.addWidget(strip_soundcues)
+        layout.addWidget(show_fetchinfo)
+
         # Pause threshold: the gap (ms) between spoken phrases that breaks a
         # subtitle cue into two. A line edit so the user can type any number.
         pause_row = QHBoxLayout()
@@ -145,11 +150,6 @@ class PreferencesDialogMixin:
         pause_row.addWidget(pause_threshold)
         pause_row.addStretch(1)
         layout.addLayout(pause_row)
-
-        # The two standalone switches, each on its own line, directly in the
-        # dialog (no group frame, like the cookies row).
-        layout.addWidget(strip_soundcues)
-        layout.addWidget(show_fetchinfo)
 
         # The JSON editor carries the channel name map only. The boolean
         # switches live in the checkboxes above, so the file the user edits

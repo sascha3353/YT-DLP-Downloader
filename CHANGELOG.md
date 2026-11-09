@@ -26,6 +26,10 @@ disagree, this file is right.
 
 ---
 
+## 1.5.14 — 2026-11-09
+
+- **Pause threshold moved below Show Info.** The “Pause threshold ms” field now sits below the “show_fetchinfo_command” checkbox in the Preferences dialog, after the three switches, instead of directly under the cookies row.
+
 ## 1.5.13 — 2026-11-09
 
 - **Pause threshold field matches the other text fields.** The “Pause threshold ms” line edit now uses the same font size as the “cookies from browser” field next to it.
