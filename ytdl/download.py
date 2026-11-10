@@ -782,12 +782,24 @@ class DownloadMixin:
                         # Process subtitles: merge auto-generated ones for 2-line
                         # display where the site needs it (YouTube), but leave
                         # subs untouched that are already well-formatted (real
-                        # subs anywhere, auto subs on e.g. Rumble).
+                        # subs anywhere, auto subs on e.g. Rumble). JSON3 files
+                        # must always be converted to SRT - they are YouTube's
+                        # internal timedtext format and are not directly usable
+                        # as subtitle files. If resync is skipped for a JSON3
+                        # file (treated as "real" because no info fetch ran),
+                        # cleanup_files() would delete the JSON3 source and no
+                        # subtitle file would remain on disk.
                         for lang, srt_path, sub_type in downloaded_subs:
-                            if not self._subtitle_needs_resync(sub_type):
+                            is_json3 = srt_path.lower().endswith(".json3")
+                            if not is_json3 and not self._subtitle_needs_resync(sub_type):
                                 self._emit("append_output", f"  → {lang} ({sub_type}): keeping original format")
                             else:
-                                self._emit("append_output", f"  → {lang} (auto): merging into 2-line format")
+                                if is_json3:
+                                    self._emit("append_output", f"  → {lang} ({sub_type}): converting to SRT")
+                                elif sub_type == "auto":
+                                    self._emit("append_output", f"  → {lang} (auto): merging into 2-line format")
+                                else:
+                                    self._emit("append_output", f"  → {lang} ({sub_type}): keeping original format")
                                 self._resync_subtitle_for_language(
                                     lang, srt_path, bare=bare_name
                                 )
