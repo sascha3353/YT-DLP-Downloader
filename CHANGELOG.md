@@ -26,6 +26,10 @@ disagree, this file is right.
 
 ---
 
+## Unreleased
+
+- **Real subtitles now kept as-is.** The download command now passes `--sub-format srt --convert-subs srt` instead of `--sub-format json3`, so yt-dlp converts subtitles to SRT natively via ffmpeg. Real (manual) subtitle tracks are stored without any Python-side processing, and auto-generated tracks still go through the 2-line rolling-layout resync. Fixes a case where a YouTube "real" subtitle downloaded as JSON3 was never converted to SRT and was then deleted by cleanup, leaving no subtitle file at all.
+
 ## 1.5.19 — 2026-11-10
 
 - **New site: RTVE Play.** Videos from rtve.es (RTVE's on-demand service) are now supported: paste a rtve.es video URL, fetch its info, and download video, audio and subtitles like any other supported site.
