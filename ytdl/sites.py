@@ -28,8 +28,12 @@ ARD_ID_REGEX = re.compile(r"/(?:player|live|video)/(?:[^?#]+/)?([^/?#]+)/?(?:[?#
 # only wired for YouTube today).
 ZDF_ID_REGEX = re.compile(r"/(?:video|play)/(?:[^?#]+/)?([^/?#]+)/?(?:[?#].*)?$")
 
+# RTVE Play / RTVE.es a la carte video pages: trailing numeric asset id after
+# /play/videos/<programa>/<slug>/ (mirrors RTVEAlacartaIE's own pattern).
+RTVE_ID_REGEX = re.compile(r"/(\d{6,})(?:/|\.shtml)?(?:[?#].*)?$")
+
 # ----------------------------------------------------------------------------------------------------
-# Supported sites (YouTube + Rumble + Odysee + ARD Mediathek + ZDF Mediathek)
+# Supported sites (YouTube + Rumble + Odysee + ARD/ZDF Mediathek + RTVE Play)
 # Each entry defines how the site is detected and which features it supports.
 # ----------------------------------------------------------------------------------------------------
 SUPPORTED_SITES = {
@@ -121,6 +125,29 @@ SUPPORTED_SITES = {
         # everything else (shows, magazines, the homepage) is rejected.
         "channel_url_regex": re.compile(r"^(?!(?:/video/|/play/))(?!.*\.html$)"),
         "id_regex": ZDF_ID_REGEX,
+    },
+    "rtve": {
+        "label": "RTVE Play",
+        # RTVE's on-demand service (rtve.es/play, formerly RTVE A la Carta);
+        # www.rtve.es is canonicalized to rtve.es by _hostname().
+        "domains": ("rtve.es",),
+        "sponsorblock": False,  # SponsorBlock is YouTube-only
+        "js_runtime": False,  # the RTVE extractor needs no JS runtime
+        "resync_auto_subs": False,  # captions are broadcast/teletext tracks, not choppy ASR
+        "supports_subtitles": True,  # the extractor exposes subtitle tracks
+        "always_extract_audio": False,  # audio-only DASH streams exist
+        "strip_embedded_cc": False,  # no broadcast EIA-608 in the streams
+        # yt-dlp's RTVE extractor only populates subtitle metadata in
+        # --print-json output when --write-subs is also passed; the app's
+        # info fetch needs --write-subs to discover available languages.
+        "needs_write_subs_for_info": True,
+        # Program/collection listing pages (one path segment after /videos/)
+        # resolve to playlists in yt-dlp; single videos carry a trailing
+        # numeric asset id plus a slug.
+        "channel_url_regex": re.compile(
+            r"^/?$|^/(?:m/)?(?:(?:alacarta|play)/videos|filmoteca)/[^/?#]+/?(?:[?#].*)?$"
+        ),
+        "id_regex": RTVE_ID_REGEX,
     },
 }
 

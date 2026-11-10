@@ -9,7 +9,7 @@ import re
 import shutil
 import subprocess
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 import requests
 from ytdl import preferences as prefs
 from ytdl.config import (
@@ -265,9 +265,18 @@ class InfoFetchMixin:
                     "--no-warnings",
                     "--no-playlist",
                     "--skip-download",
-                    url,
                 ]
             )
+            # Some extractors (RTVE) only expose subtitle metadata in
+            # --print-json output when --write-subs is also passed. Add it
+            # for those sites so the info fetch can discover available
+            # languages. Writing .vtt files is a harmless side effect of
+            # --skip-download; they are overwritten by the actual download.
+            if SUPPORTED_SITES.get(
+                self.video_state.get("site", DEFAULT_SITE), {}
+            ).get("needs_write_subs_for_info", False):
+                cmd.append("--write-subs")
+            cmd.append(url)
             # Log the info-fetch command if enabled (disabled by default)
             if prefs.show_fetchinfo_command():
                 # Same redaction as the download command log: a value-taking
@@ -288,9 +297,22 @@ class InfoFetchMixin:
 
                 title = _s("title")
                 upload_date = _s("upload_date")
+                if not upload_date and json_data.get("epoch"):
+                    # Some extractors (RTVE) don't expose upload_date but do
+                    # expose epoch; derive the date from it so the same
+                    # S%yE%m%d prefix code path below kicks in.
+                    dt_epoch = datetime.fromtimestamp(
+                        json_data["epoch"], tz=timezone.utc
+                    )
+                    upload_date = dt_epoch.strftime("%Y%m%d")
                 duration = _s("duration_string")
                 duration_sec = json_data.get("duration") or 0
                 youtube_channel = _s("channel")
+                if not youtube_channel:
+                    # Some extractors (RTVE) expose a series name instead of
+                    # a channel; fall back to it so downloads land in a
+                    # meaningful per-program folder rather than "Unknown Channel".
+                    youtube_channel = _s("series")
                 channel = prefs.CHANNEL_NAME_MAP.get(youtube_channel, youtube_channel)
                 thumbnail_url = _s("thumbnail")
                 language = _s("language")

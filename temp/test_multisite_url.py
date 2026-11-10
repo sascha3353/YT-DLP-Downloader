@@ -390,7 +390,7 @@ class TestOdyseeIdRegex(unittest.TestCase):
         # one entry there - two profiles, one broadcaster family.
         self.assertEqual(
             app.SUPPORTED_SITES_LABEL,
-            "YouTube, Rumble, Odysee, ARD/ZDF Mediathek",
+            "YouTube, Rumble, Odysee, ARD/ZDF Mediathek, RTVE Play",
         )
 
     def test_short_label_does_not_leak_into_per_site_messages(self):
@@ -411,6 +411,100 @@ class TestOdyseeIdRegex(unittest.TestCase):
             with open(os.path.join(root, rel), encoding="utf-8") as fh:
                 count += fh.read().count('"Supported: "')
         self.assertEqual(count, 2)
+
+
+class TestRtv(unittest.TestCase):
+    """RTVE Play (rtve.es) profile wiring."""
+
+    RTVE_URL = "https://www.rtve.es/play/videos/la-revuelta/programa-09-11-26-santiago-abascal/17306884/"
+
+    def test_detect_site(self):
+        self.assertEqual(app.detect_site(self.RTVE_URL), "rtve")
+        self.assertEqual(app.detect_site("https://rtve.es/alacarta/videos/x/y/1/"), "rtve")
+        self.assertEqual(app.detect_site("http://www.rtve.es/play/videos/x/y/2/"), "rtve")
+
+    def test_id_regex(self):
+        m = app.RTVE_ID_REGEX.search(self.RTVE_URL)
+        self.assertEqual(m.group(1), "17306884")
+        m = app.RTVE_ID_REGEX.search(
+            "http://www.rtve.es/alacarta/videos/la-aventura-del-saber/aventuraentornosilla/3088905/"
+        )
+        self.assertEqual(m.group(1), "3088905")
+        m = app.RTVE_ID_REGEX.search(
+            "https://www.rtve.es/television/20091103/video-inedito-del-8o-programa/299020.shtml"
+        )
+        self.assertEqual(m.group(1), "299020")
+        # A program listing page has no numeric asset id
+        self.assertIsNone(app.RTVE_ID_REGEX.search("https://www.rtve.es/play/videos/la-revuelta/"))
+
+    def test_normalize_url(self):
+        self.assertEqual(
+            app.normalize_url(self.RTVE_URL),
+            self.RTVE_URL,
+        )
+        self.assertEqual(
+            app.normalize_url("rtve.es/play/videos/la-revuelta/programa-x/1234567/"),
+            "https://rtve.es/play/videos/la-revuelta/programa-x/1234567/",
+        )
+
+    def test_profile_flags(self):
+        profile = app.SUPPORTED_SITES["rtve"]
+        self.assertEqual(profile["label"], "RTVE Play")
+        self.assertIn("rtve.es", profile["domains"])
+        self.assertFalse(profile["sponsorblock"])
+        self.assertFalse(profile["js_runtime"])
+        self.assertFalse(profile["resync_auto_subs"])
+        self.assertTrue(profile["supports_subtitles"])
+        self.assertFalse(profile["always_extract_audio"])
+        self.assertFalse(profile["strip_embedded_cc"])
+        self.assertIs(profile["id_regex"], app.RTVE_ID_REGEX)
+        # No per-site overrides: the default budget and no slow hint
+        self.assertEqual(app.site_info_timeout("rtve"), app.INFO_FETCH_TIMEOUT_SECONDS)
+        self.assertEqual(app.site_slow_hint("rtve"), "")
+        # Unknown/future sites keep the historical defaults
+        self.assertTrue(app.site_wants_js_runtime("some-future-site"))
+        self.assertTrue(app.site_resyncs_auto_subs("some-future-site"))
+        self.assertFalse(app.site_supports_sponsorblock("some-future-site"))
+
+    def test_download_command_skips_deno_for_rtve(self):
+        h = TestFormatChoiceLine.Harness("video")
+        h.deno_bin = "deno"
+        h.video_state["site"] = "rtve"
+        with mock.patch.object(app.shutil, "which", return_value="/usr/bin/deno"):
+            cmd = h.build_command(selected_langs=None)
+        self.assertNotIn("--js-runtimes", cmd)
+
+    def test_audio_best_kept_for_rtve(self):
+        # RTVE offers audio-only DASH streams, so "Best" audio must not force -x
+        h = TestFormatChoiceLine.Harness("audio")
+        h.video_state["site"] = "rtve"
+        cmd = h.build_command(selected_langs=None)
+        self.assertIn("-f", cmd)
+        self.assertEqual(cmd[cmd.index("-f") + 1], "bestaudio/best")
+        self.assertNotIn("-x", cmd)
+
+
+class TestRtvUrlGate(unittest.TestCase):
+    """url_rejection_reason() end-to-end for the RTVE Play profile."""
+
+    class Harness:
+        url_rejection_reason = app.YTDLPDownloaderGUI.url_rejection_reason
+
+    def test_rtve_video_passes(self):
+        h = self.Harness()
+        self.assertIsNone(h.url_rejection_reason(TestRtv.RTVE_URL))
+
+    def test_rtve_program_page_rejected(self):
+        h = self.Harness()
+        self.assertEqual(
+            h.url_rejection_reason("https://www.rtve.es/play/videos/la-revuelta/"),
+            "Channel/playlist URLs are not supported — "
+            "please paste a link to a single video",
+        )
+
+    def test_header_still_lists_all_sites(self):
+        self.assertIn("RTVE Play", app.SUPPORTED_SITES_LABEL)
+        self.assertEqual(app.SUPPORTED_SITES["rtve"]["domains"], ("rtve.es",))
 
 
 class TestFormatChoiceLine(unittest.TestCase):
@@ -656,6 +750,7 @@ class TestBuildCommandAudio(unittest.TestCase):
                 "odysee": False,
                 "ard": False,
                 "zdf": False,
+                "rtve": False,
             },
         )
 

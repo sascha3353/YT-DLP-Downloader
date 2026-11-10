@@ -65,6 +65,7 @@ from ytdl.sites import (  # noqa: F401
     ARD_ID_REGEX,
     DEFAULT_SITE,
     ODYSEE_ID_REGEX,
+    RTVE_ID_REGEX,
     RUMBLE_ID_REGEX,
     SUPPORTED_SITES,
     SUPPORTED_SITES_LABEL,

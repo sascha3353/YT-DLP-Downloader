@@ -26,6 +26,11 @@ disagree, this file is right.
 
 ---
 
+## 1.5.19 — 2026-11-10
+
+- **New site: RTVE Play.** Videos from rtve.es (RTVE's on-demand service) are now supported: paste a rtve.es video URL, fetch its info, and download video, audio and subtitles like any other supported site.
+- **RTVE subtitles and title prefix.** The info fetch now passes `--write-subs` for RTVE so available subtitle languages are discovered (es, en, ca, gl, eu). RTVE videos expose a `series` name instead of a channel, so downloads land in a per-program folder (e.g. `La Revuelta/`) and the title gets an `S%yE%m%d` date prefix derived from the video's `epoch` (e.g. `S26E1110 - Santiago Abascal`), matching ARD/ZDF behavior.
+
 ## 1.5.18 — 2026-11-09
 
 - **Subtitle robustness fixes.** JSON3 subtitles no longer drop text from zero-duration events, the JSON3 parser skips events without a start time instead of placing a bogus cue at the file start, malformed JSON3 (non-object) is ignored instead of crashing, and blank lines inside JSON3 cue text no longer split an SRT block. Subtitle language auto-selection now reads from the info fetch rather than parsing checkbox labels, and all subtitle key patterns are escaped consistently. A user-made bare subtitle file is no longer deleted by the superseded-file cleanup.
