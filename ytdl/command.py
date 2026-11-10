@@ -283,7 +283,9 @@ class CommandMixin:
                     "--sub-langs",
                     lang_arg,
                     "--sub-format",
-                    "json3",
+                    "srt",
+                    "--convert-subs",
+                    "srt",
                 ]
             )
 
