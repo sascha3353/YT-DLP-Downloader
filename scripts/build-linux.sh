@@ -19,12 +19,16 @@
 # same way — the app has no .git to read inside the package, so the build stamps
 # the commit in and it appears in the output-panel header.
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT" || exit 1
+
 # Locate pyinstaller: project venv first, then pip --user (~/.local/bin),
 # then PATH. The script itself runs under bash regardless of the launching
 # shell (fish, zsh, ...), so no venv activation is required.
 PYINSTALLER=""
 for candidate in \
-    "$(dirname "$0")/.venv/bin/pyinstaller" \
+    "$REPO_ROOT/.venv/bin/pyinstaller" \
     "$HOME/.local/bin/pyinstaller" \
     "$(command -v pyinstaller 2>/dev/null)"
 do

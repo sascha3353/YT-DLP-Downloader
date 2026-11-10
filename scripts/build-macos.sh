@@ -8,7 +8,8 @@
 # through resource_path() and shows it in the output-panel header. Without this
 # the packaged app would report a version with no commit.
 
-REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
 PYINSTALLER=""
