@@ -10,13 +10,15 @@ import re
 import shutil
 import threading
 import requests
+
+import yt_dlp
 from PyQt6.QtCore import QSize, QTimer, Qt
 from PyQt6.QtGui import QAction, QIcon, QKeyEvent, QKeySequence, QPixmap, QShortcut
 from PyQt6.QtWidgets import QApplication, QButtonGroup, QCheckBox, QDialog, QFileDialog, QFrame, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QRadioButton, QSizePolicy, QStyle, QTextBrowser, QToolButton, QVBoxLayout, QWidget
 from ytdl.config import DEFAULT_OUTPUT_DIR
 from ytdl.progress import DownloadProgressManager
 from ytdl.sites import SUPPORTED_SITES_LABEL
-from ytdl.utils import get_log_dir, resource_path, version_header
+from ytdl.utils import get_log_dir, resource_path, sanitize_title, version_header
 from ytdl.widgets import BusySpinner, CustomTextEdit, SB_CATEGORY_COLORS, SB_DISPLAY_NAMES, SponsorBlockBar
 
 logger = logging.getLogger(__name__)
@@ -248,6 +250,18 @@ class UiBuildMixin:
         self.thumbnail_button.clicked.connect(self.open_thumbnail_dialog)
         self.thumbnail_button.setEnabled(False)
         info_log_layout.addWidget(self.thumbnail_button)
+
+        self.channel_button = QToolButton()
+        self.channel_button.setObjectName("sidebarButton")
+        self.channel_button.setText("Channel")
+        self.channel_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView))
+        self.channel_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        self.channel_button.setToolTip("Show Channel Info (logo, banner, description)")
+        self.channel_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.channel_button.setFixedWidth(72)
+        self.channel_button.clicked.connect(self.open_channel_dialog)
+        self.channel_button.setEnabled(False)
+        info_log_layout.addWidget(self.channel_button)
 
         self.log_button = QToolButton()
         self.log_button.setObjectName("sidebarButton")
@@ -646,7 +660,7 @@ class UiBuildMixin:
         main_layout.addWidget(self.output_text)
 
         # Sidebar toolbar buttons (left)
-        for btn in (self.paste_button, self.reload_button, self.nice_button, self.thumbnail_button, self.subs_button, self.log_button, self.cancel_button, self.reset_button):
+        for btn in (self.paste_button, self.reload_button, self.nice_button, self.thumbnail_button, self.channel_button, self.subs_button, self.log_button, self.cancel_button, self.reset_button):
             btn.setFixedHeight(56)
             sidebar.addWidget(btn)
         sidebar.addStretch(1)
@@ -1160,6 +1174,372 @@ class UiBuildMixin:
 
         except Exception as e:
             self.signals.append_output.emit(f"🚩 Error showing thumbnail dialog: {e}")
+
+    # ----------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------
+    # Channel data fetch (YouTube only) — uses yt-dlp's Python API to extract
+    # channel thumbnails (logo/avatar + banner) plus name and description,
+    # avoiding the consent-wall that blocks direct HTML scraping of channel pages.
+    # ----------------------------------------------------------------------------------------------------
+    def _fetch_channel_data(self, channel_url):
+        """
+        Fetch a YouTube channel's metadata via yt-dlp's Python API.
+        Results are cached in memory (self._channel_cache) for the app lifetime
+        so repeat fetches of the same channel skip the yt-dlp call.
+        Returns a dict with banner_url, logo_url, channel_name, channel_description
+        — all may be None if extraction fails.
+        """
+        if not channel_url or "youtube.com" not in channel_url:
+            return {"banner_url": None, "logo_url": None,
+                    "channel_name": None, "channel_description": None}
+
+        # In-memory cache hit — return a copy so callers can't mutate the cache.
+        cached = self._channel_cache.get(channel_url)
+        if cached is not None:
+            return dict(cached)
+
+        try:
+            ydl_opts = {
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+                "playlist_items": "0",  # channel metadata only, no videos
+                "extract_flat": True,
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(channel_url, download=False)
+        except Exception:
+            return {"banner_url": None, "logo_url": None,
+                    "channel_name": None, "channel_description": None}
+
+        result = {"banner_url": None, "logo_url": None,
+                  "channel_name": None, "channel_description": None}
+
+        # Channel name / description from the info dict
+        result["channel_name"] = info.get("channel") or info.get("uploader") or None
+        raw_desc = info.get("description") or ""
+        if raw_desc:
+            result["channel_description"] = raw_desc[:5000]  # cap length
+
+        # Thumbnails: pick logo (square/avatar) and banner (wide)
+        thumbs = info.get("thumbnails") or []
+        by_id = {}
+        for t in thumbs:
+            tid = t.get("id")
+            if tid:
+                by_id[tid] = t
+
+        def biggest(items):
+            return max(items, key=lambda t: t.get("width") or 0, default=None)
+
+        logo = by_id.get("avatar_uncropped") or biggest(
+            t for t in thumbs
+            if t.get("width") and t.get("height")
+            and t.get("width") == t.get("height")
+        )
+        banner = by_id.get("banner_uncropped") or biggest(
+            t for t in thumbs
+            if t.get("width") and t.get("height")
+            and t["width"] > 2 * t["height"]
+        )
+
+        if logo:
+            result["logo_url"] = logo.get("url")
+        if banner:
+            result["banner_url"] = banner.get("url")
+
+        # Store in in-memory cache for the app lifetime.
+        self._channel_cache[channel_url] = dict(result)
+
+        return result
+
+
+    def open_channel_dialog(self):
+        channel_url = self.video_state.get("channel_url", "")
+        if not channel_url:
+            self.signals.append_output.emit("👉 No channel URL available")
+            return
+
+        # Single-flight guard: ignore extra clicks while a fetch is in progress
+        if self._fetching_channel:
+            return
+        self._fetching_channel = True
+
+        snapshot_url = channel_url
+        self._channel_request_token += 1
+        snapshot_token = self._channel_request_token
+
+        # Create dialog immediately with placeholders — shown before data loads
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Channel")
+        layout = QVBoxLayout(dialog)
+
+        # Add Command+Q shortcut to the dialog
+        quit_shortcut = QShortcut(QKeySequence("Ctrl+Q"), dialog)
+        app_instance = QApplication.instance()
+        if app_instance:
+            quit_shortcut.activated.connect(app_instance.quit)
+
+        # Placeholder: channel logo (avatar) — spinner + label
+        self._channel_logo_spinner = BusySpinner(self, size=24)
+        self._channel_logo_spinner.start()
+        self._channel_logo_label = QLabel("Loading channel logo…")
+        self._channel_logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._channel_logo_spinner, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._channel_logo_label)
+
+        # Placeholder: channel banner — spinner + label
+        self._channel_banner_spinner = BusySpinner(self, size=24)
+        self._channel_banner_spinner.start()
+        self._channel_banner_label = QLabel("Loading channel banner…")
+        self._channel_banner_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._channel_banner_spinner, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._channel_banner_label)
+
+        # Placeholder: channel description
+        self._channel_desc_label = QLabel("Loading channel description…")
+        self._channel_desc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._channel_desc_label)
+
+        dialog.resize(730, 635)
+        dialog.show()  # non-blocking: panel appears before content loads
+
+        # Keep references so _show_channel_dialog can update this dialog
+        self._channel_dialog = dialog
+        self._channel_dialog_layout = layout
+
+        def _fetch_and_show():
+            try:
+                channel_data = self._fetch_channel_data(snapshot_url)
+
+                banner_bytes = None
+                if channel_data["banner_url"]:
+                    try:
+                        resp = requests.get(
+                            channel_data["banner_url"],
+                            timeout=8,
+                            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                                   "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                                   "Chrome/140.0 Safari/537.36"},
+                        )
+                        resp.raise_for_status()
+                        banner_bytes = resp.content
+                    except Exception:
+                        pass
+
+                logo_bytes = None
+                if channel_data["logo_url"]:
+                    try:
+                        resp = requests.get(
+                            channel_data["logo_url"],
+                            timeout=8,
+                            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                                   "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                                   "Chrome/140.0 Safari/537.36"},
+                        )
+                        resp.raise_for_status()
+                        logo_bytes = resp.content
+                    except Exception:
+                        pass
+
+                self._emit(
+                    "channel_ready",
+                    banner_bytes or b"",
+                    logo_bytes or b"",
+                    channel_data["channel_name"] or "",
+                    channel_data["channel_description"] or "",
+                    snapshot_url,
+                    snapshot_token,
+                )
+            finally:
+                if snapshot_token == self._channel_request_token:
+                    self._fetching_channel = False
+
+        threading.Thread(target=_fetch_and_show, daemon=True).start()
+
+    def _show_channel_dialog(self, banner_bytes: bytes, logo_bytes: bytes,
+                             channel_name: str, channel_description: str,
+                             snapshot_url: str, token: int):
+        # Reset the flight guard only for this request.
+        if token == self._channel_request_token:
+            self._fetching_channel = False
+        try:
+            # Staleness guard: the user may have switched videos while the
+            # channel data was in flight.
+            if snapshot_url != self.video_state.get("channel_url", ""):
+                return
+
+            # Store channel data in video_state so the Write Metadata button
+            # can access it later.
+            self.video_state["channel_name"] = channel_name
+            self.video_state["channel_description"] = channel_description
+            self.video_state["channel_logo_bytes"] = logo_bytes
+
+            dialog = self._channel_dialog
+            if dialog is None:
+                return
+
+            # Update window title with channel name (use mapped name from
+            # preferences, same as downloads, falling back to raw name)
+            mapped_title = self.video_state.get("channel", "") or channel_name
+            if mapped_title:
+                dialog.setWindowTitle(mapped_title)
+
+            layout = self._channel_dialog_layout
+
+            # Replace logo placeholder with actual image
+            self._channel_logo_spinner.stop()
+            self._channel_logo_label.hide()
+            if logo_bytes:
+                logo_pixmap = QPixmap()
+                if logo_pixmap.loadFromData(logo_bytes):
+                    logo_image_label = QLabel()
+                    logo_image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    logo_pixmap = logo_pixmap.scaledToWidth(
+                        120, Qt.TransformationMode.SmoothTransformation
+                    )
+                    logo_image_label.setPixmap(logo_pixmap)
+                    layout.addWidget(logo_image_label, alignment=Qt.AlignmentFlag.AlignCenter)
+
+            # Replace banner placeholder with actual image
+            self._channel_banner_spinner.stop()
+            self._channel_banner_label.hide()
+            if banner_bytes:
+                banner_pixmap = QPixmap()
+                if banner_pixmap.loadFromData(banner_bytes):
+                    banner_image_label = QLabel()
+                    banner_image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    banner_pixmap = banner_pixmap.scaledToWidth(
+                        420, Qt.TransformationMode.SmoothTransformation
+                    )
+                    banner_image_label.setPixmap(banner_pixmap)
+                    layout.addWidget(banner_image_label, alignment=Qt.AlignmentFlag.AlignCenter)
+
+            # Replace description placeholder with actual text
+            self._channel_desc_label.hide()
+            if channel_description:
+                desc_text = QTextBrowser()
+                desc_text.setReadOnly(True)
+                desc_text.setOpenExternalLinks(True)
+                escaped_desc = html.escape(channel_description)
+                url_pattern = r'(https?://[^\s<>"]+|www\.[^\s<>"]+)'
+
+                def make_link(match):
+                    url = match.group(1)
+                    full_url = url if url.startswith("http") else "http://" + url
+                    return f'<a href="{full_url}">{url}</a>'
+
+                html_desc = re.sub(url_pattern, make_link, escaped_desc)
+                desc_text.setHtml(html_desc.replace("\n", "<br>"))
+                desc_text.setMaximumHeight(200)
+                layout.addWidget(desc_text)
+
+            # Write Metadata button at the bottom
+            write_meta_btn = QPushButton("Write Metadata")
+            write_meta_btn.setFixedWidth(140)
+            write_meta_btn.clicked.connect(self._write_channel_metadata)
+            btn_layout = QHBoxLayout()
+            btn_layout.addStretch(1)
+            btn_layout.addWidget(write_meta_btn)
+            btn_layout.addStretch(1)
+            layout.addLayout(btn_layout)
+
+            dialog.resize(730, 635)
+            dialog.exec()
+
+        except Exception as e:
+            self.signals.append_output.emit(f"🚩 Error showing channel dialog: {e}")
+
+    def _write_channel_metadata(self):
+        """Write channel folder, poster.jpg and tvshow.nfo metadata."""
+        channel_name = self.video_state.get("channel_name", "")
+        channel_description = self.video_state.get("channel_description", "")
+        logo_bytes = self.video_state.get("channel_logo_bytes", b"")
+
+        # Use the channel-name mapping from preferences (same as downloads) for
+        # folder naming, falling back to the raw channel name if not set.
+        mapped_channel = self.video_state.get("channel", "") or channel_name
+
+        if not mapped_channel:
+            self.signals.append_output.emit("🚩 No channel name available")
+            return
+
+        root_output_dir = self.output_dir_entry.text().strip() or DEFAULT_OUTPUT_DIR
+        sanitized_channel = sanitize_title(mapped_channel) or "Unknown Channel"
+        channel_folder = os.path.join(root_output_dir, sanitized_channel)
+
+        try:
+            if os.path.exists(channel_folder):
+                self.signals.append_output.emit(
+                    f"📂 Directory already exists: {sanitized_channel}"
+                )
+            else:
+                os.makedirs(channel_folder, exist_ok=True)
+                self.signals.append_output.emit(
+                    f"📂 Created directory: {sanitized_channel}"
+                )
+        except Exception as e:
+            self.signals.append_output.emit(f"🚩 Error creating directory: {e}")
+            return
+
+        # Resize + crop logo to 480x720 and save as poster.jpg
+        if logo_bytes:
+            try:
+                from PIL import Image
+                import io
+                img = Image.open(io.BytesIO(logo_bytes)).convert("RGB")
+                # Step 1: resize to 720x720 square
+                img = img.resize((720, 720), Image.Resampling.LANCZOS)
+                # Step 2: center-crop to 480x720
+                left = (720 - 480) // 2
+                top = (720 - 720) // 2
+                right = left + 480
+                bottom = top + 720
+                img = img.crop((left, top, right, bottom))
+                poster_path = os.path.join(channel_folder, "poster.jpg")
+                img.save(poster_path, "JPEG", quality=90)
+                self.signals.append_output.emit(f"🖼️ Wrote poster.jpg")
+            except Exception as e:
+                self.signals.append_output.emit(f"🚩 Error writing poster.jpg: {e}")
+        else:
+            self.signals.append_output.emit("👉 No channel logo available for poster")
+
+        # Write tvshow.nfo (premiered left empty)
+        nfo_path = os.path.join(channel_folder, "tvshow.nfo")
+
+        # Remove empty lines from description
+        cleaned_lines = [
+            line for line in channel_description.splitlines() if line.strip()
+        ]
+        cleaned_description = "\n".join(cleaned_lines)
+
+        escaped_title = channel_name.strip().replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        escaped_plot = cleaned_description.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        nfo_content = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>\n'
+            "<tvshow>\n"
+            f"    <title>{escaped_title}</title>\n"
+            "    <season>1</season>\n"
+            f"    <plot>{escaped_plot}</plot>\n"
+            "    <premiered></premiered>\n"
+            "</tvshow>\n"
+        )
+        try:
+            with open(nfo_path, "w", encoding="utf-8") as f:
+                f.write(nfo_content)
+            self.signals.append_output.emit(f"📄 Wrote tvshow.nfo")
+        except Exception as e:
+            self.signals.append_output.emit(f"🚩 Error writing tvshow.nfo: {e}")
+            return
+
+        # Confirmation dialog
+        QMessageBox.information(
+            self,
+            "Metadata Written",
+            f"Channel metadata written to folder:\n{sanitized_channel}\n\n"
+            f"Files: poster.jpg, tvshow.nfo",
+        )
+
 
     def open_log_dialog(self):
         log_path = os.path.join(get_log_dir(), "app.log")

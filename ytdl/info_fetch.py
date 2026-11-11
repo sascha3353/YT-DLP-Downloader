@@ -351,6 +351,8 @@ class InfoFetchMixin:
                 self.update_video_state(
                     original_title=title,
                     channel=channel,
+                    channel_id=_s("channel_id"),
+                    channel_url=_s("channel_url"),
                     description=description,
                     thumbnail_url=thumbnail_url,
                     upload_date=upload_date,

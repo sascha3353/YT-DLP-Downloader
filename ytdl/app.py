@@ -175,6 +175,8 @@ class YTDLPDownloaderGUI(
             "title": "",
             "description": "",
             "thumbnail_url": "",
+            "channel_id": "",
+            "channel_url": "",
             "upload_date": "",
             "language": "",
             "output_dir": DEFAULT_OUTPUT_DIR,
@@ -234,6 +236,7 @@ class YTDLPDownloaderGUI(
         self.signals.thumbnail_ready.connect(self._show_thumbnail_dialog)
         self.signals.thumbnail_icon_ready.connect(self._set_thumbnail_icon)
         self.signals.thumbnail_error.connect(self._append_thumbnail_error)
+        self.signals.channel_ready.connect(self._show_channel_dialog)
 
         # Guard: prevent concurrent thumbnail fetches from double-clicking Info
         self._fetching_thumbnail = False
@@ -242,6 +245,14 @@ class YTDLPDownloaderGUI(
         # in-flight guard. Both receivers only act when the token still matches
         # the current request.
         self._thumbnail_request_token = 0
+        # Guard: prevent concurrent channel fetches from double-clicking Channel
+        self._fetching_channel = False
+        # Channel request token — same staleness pattern as thumbnails.
+        self._channel_request_token = 0
+        # In-memory channel cache (lifetime = app process). Maps channel_url to
+        # {channel_name, channel_description, logo_url, banner_url} so repeat
+        # fetches of the same channel skip the yt-dlp call. Cleared on app exit.
+        self._channel_cache = {}
         # Last (video, audio) progress values, kept so the bars can be restored
         self._last_progress_values = (0, 0)
 
@@ -454,6 +465,8 @@ class YTDLPDownloaderGUI(
             # be used as a filename if the user clicks Download during the
             # 500 ms debounce window before the new info fetch begins.
             self.video_state["channel"] = ""
+            self.video_state["channel_id"] = ""
+            self.video_state["channel_url"] = ""
             self.video_state["thumbnail_url"] = ""
             self.title_entry.clear()
             self.download_button.setEnabled(False)
@@ -580,6 +593,10 @@ class YTDLPDownloaderGUI(
             # Only enable Info button when there is actually a thumbnail to show
             self.thumbnail_button.setEnabled(
                 bool(self.video_state.get("thumbnail_url"))
+            )
+            # Only enable Channel button when there is a channel URL (YouTube)
+            self.channel_button.setEnabled(
+                bool(self.video_state.get("channel_url"))
             )
             # Fetch the thumbnail for the Info toolbar icon if available
             if self.video_state.get("thumbnail_url"):
@@ -892,6 +909,8 @@ class YTDLPDownloaderGUI(
             "title": "",
             "description": "",
             "thumbnail_url": "",
+            "channel_id": "",
+            "channel_url": "",
             "upload_date": "",
             "language": "",
             "output_dir": DEFAULT_OUTPUT_DIR,

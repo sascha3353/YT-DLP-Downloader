@@ -28,7 +28,8 @@ disagree, this file is right.
 
 ## Unreleased
 
-- **RTVE subtitle discovery works on read-only filesystems.** The info fetch now passes `--write-subs` to discover RTVE subtitle languages, but writes the subtitle files to a temporary directory and deletes it immediately after — so the info fetch no longer fails with "Read-only file system" when the current directory isn't writable.
+- **New: Channel info panel.** A new “Channel” button next to “Show Info” opens a panel with the channel’s logo (avatar), banner, and description for YouTube videos. The panel lazy-loads with spinners while data fetches in the background.
+- **New: Write channel metadata.** The Channel panel’s “Write Metadata” button creates a channel folder (named per your `channel_name_map` preferences, same as downloads), writes a `poster.jpg` (channel logo resized/cropped to 480×720) and a `tvshow.nfo` (title, season 1, description) — handy for Kodi/Plex-style media libraries.
 
 ## 1.5.20 — 2026-11-10
 

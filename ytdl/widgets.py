@@ -86,6 +86,9 @@ class SignalEmitter(QObject):
     # receiver's comparison against the current value catches a queued error
     # that arrived after the change but before the next Info click.
     thumbnail_icon_ready = pyqtSignal(bytes, str, str, int)
+    # Channel dialog: banner bytes, logo bytes, channel name, channel
+    # description, snapshot URL captured at click time, and a request token.
+    channel_ready = pyqtSignal(bytes, bytes, str, str, str, int)
     # Same shape as thumbnail_ready but used exclusively for updating the
     # "Show Info" toolbar icon. Kept as a separate signal so the icon fetch
     # (triggered automatically after info fetch) does not also pop the
