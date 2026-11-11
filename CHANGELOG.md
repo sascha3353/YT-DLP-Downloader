@@ -28,6 +28,10 @@ disagree, this file is right.
 
 ## Unreleased
 
+- **RTVE subtitle discovery works on read-only filesystems.** The info fetch now passes `--write-subs` to discover RTVE subtitle languages, but writes the subtitle files to a temporary directory and deletes it immediately after — so the info fetch no longer fails with "Read-only file system" when the current directory isn't writable.
+
+## 1.5.20 — 2026-11-10
+
 - **Real subtitles now kept as-is.** The download command now passes `--sub-format srt --convert-subs srt` instead of `--sub-format json3`, so yt-dlp converts subtitles to SRT natively via ffmpeg. Real (manual) subtitle tracks are stored without any Python-side processing, and auto-generated tracks still go through the 2-line rolling-layout resync. Fixes a case where a YouTube "real" subtitle downloaded as JSON3 was never converted to SRT and was then deleted by cleanup, leaving no subtitle file at all.
 
 ## 1.5.19 — 2026-11-10
