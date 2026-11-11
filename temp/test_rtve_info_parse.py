@@ -101,13 +101,11 @@ class TestRtvInfoParse(unittest.TestCase):
         # The title should carry the S%yE%m%d prefix derived from epoch.
         self.assertIn("S26E1111 - Santiago Abascal", text)
 
-    def test_subtitles_not_discovered_for_rtve_during_info_fetch(self):
-        # The info fetch does NOT pass --write-subs (writing subtitle files
-        # during info fetch can fail on read-only file systems), so RTVE's
-        # extractor does not expose subtitle metadata in --print-json output.
-        # Subtitles are still downloaded during the actual download (the
-        # download command passes --write-subs --convert-subs srt), they are
-        # just not discovered/pre-announced in the info panel.
+    def test_subtitles_discovered_for_rtve(self):
+        # RTVE's extractor only exposes subtitle metadata in --print-json
+        # when --write-subs is passed. The info fetch now adds --write-subs
+        # (writing subtitle files to a temp directory), so the app should
+        # discover the available languages (es, en, ca, gl, eu).
         h, captured, status = self._run()
         text = "\n".join(captured)
 
@@ -115,8 +113,13 @@ class TestRtvInfoParse(unittest.TestCase):
         self.assertNotIn("no audio formats", text)
         self.assertFalse(status.get("error"))
         self.assertEqual(h.video_state.get("original_title"), self.capture["title"].strip())
-        self.assertIn("Subtitles: None available", text)
-        self.assertEqual(h.video_state.get("available_subtitles"), {})
+        # Spanish should be among the discovered (real) subtitle languages
+        self.assertIn("Subtitles: ca (real), en (real), es (real), eu (real), gl (real)", text)
+        # Spanish and English are discovered as real (manual) tracks; German
+        # is not offered by this video so it has no checkbox. ca/eu/gl show
+        # in the output text but have no UI checkbox, so they are not in the
+        # availability dict.
+        self.assertEqual(h.video_state.get("available_subtitles"), {"en": "real", "es": "real"})
 
     def test_sponsorblock_skipped_for_rtve(self):
         h, captured, status = self._run()

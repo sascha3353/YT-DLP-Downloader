@@ -137,6 +137,11 @@ SUPPORTED_SITES = {
         "supports_subtitles": True,  # the extractor exposes subtitle tracks
         "always_extract_audio": False,  # audio-only DASH streams exist
         "strip_embedded_cc": False,  # no broadcast EIA-608 in the streams
+        # yt-dlp's RTVE extractor only populates subtitle metadata in
+        # --print-json output when --write-subs is also passed; the app's
+        # info fetch adds --write-subs but writes subtitle files to a temp
+        # directory so it works on read-only filesystems.
+        "needs_write_subs_for_info": True,
         # Program/collection listing pages (one path segment after /videos/)
         # resolve to playlists in yt-dlp; single videos carry a trailing
         # numeric asset id plus a slug.

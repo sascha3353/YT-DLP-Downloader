@@ -5,9 +5,11 @@ methods access shared state via self."""
 
 import json
 import logging
+import os
 import re
 import shutil
 import subprocess
+import tempfile
 import threading
 from datetime import datetime, timezone
 import requests
@@ -265,9 +267,27 @@ class InfoFetchMixin:
                     "--no-warnings",
                     "--no-playlist",
                     "--skip-download",
-                    url,
                 ]
             )
+            # Some extractors (RTVE) only expose subtitle metadata in
+            # --print-json output when --write-subs is also passed. Add it
+            # for those sites so the info fetch can discover available
+            # languages. Subtitle files are written to a temp directory so
+            # this works even on read-only filesystems; they are cleaned up
+            # immediately after the info fetch completes.
+            subs_tmpdir = None
+            if SUPPORTED_SITES.get(
+                self.video_state.get("site", DEFAULT_SITE), {}
+            ).get("needs_write_subs_for_info", False):
+                subs_tmpdir = tempfile.mkdtemp(prefix="ytdl-info-subs-")
+                cmd.extend(
+                    [
+                        "--write-subs",
+                        "--output",
+                        f"{subs_tmpdir}/%(title)s.%(ext)s",
+                    ]
+                )
+            cmd.append(url)
             # Log the info-fetch command if enabled (disabled by default)
             if prefs.show_fetchinfo_command():
                 # Same redaction as the download command log: a value-taking
@@ -276,7 +296,16 @@ class InfoFetchMixin:
                     "append_output",
                     f"\n🖥️ {' '.join(str(item) for item in _redact_command(cmd) if item)}",
                 )
-            result = self._run_info_command(cmd, info_timeout)
+            try:
+                result = self._run_info_command(cmd, info_timeout)
+            finally:
+                # Clean up the temp directory used for subtitle files during
+                # info fetch, regardless of success or failure.
+                if subs_tmpdir is not None:
+                    try:
+                        shutil.rmtree(subs_tmpdir)
+                    except OSError:
+                        pass
             if result.returncode == 0 and result.stdout.strip():
                 json_data = json.loads(result.stdout.strip())
 
