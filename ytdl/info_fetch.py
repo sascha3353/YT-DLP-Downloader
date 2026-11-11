@@ -265,18 +265,9 @@ class InfoFetchMixin:
                     "--no-warnings",
                     "--no-playlist",
                     "--skip-download",
+                    url,
                 ]
             )
-            # Some extractors (RTVE) only expose subtitle metadata in
-            # --print-json output when --write-subs is also passed. Add it
-            # for those sites so the info fetch can discover available
-            # languages. Writing .vtt files is a harmless side effect of
-            # --skip-download; they are overwritten by the actual download.
-            if SUPPORTED_SITES.get(
-                self.video_state.get("site", DEFAULT_SITE), {}
-            ).get("needs_write_subs_for_info", False):
-                cmd.append("--write-subs")
-            cmd.append(url)
             # Log the info-fetch command if enabled (disabled by default)
             if prefs.show_fetchinfo_command():
                 # Same redaction as the download command log: a value-taking

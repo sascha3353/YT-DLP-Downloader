@@ -92,19 +92,22 @@ class TestRtvInfoParse(unittest.TestCase):
         self.assertEqual(h.video_state.get("original_title"), self.capture["title"].strip())
         # RTVE exposes no upload_date but does expose epoch; the app should
         # derive the date from it and generate the S%yE%m%d prefix.
-        self.assertEqual(h.video_state.get("upload_date"), "20261110")
+        self.assertEqual(h.video_state.get("upload_date"), "20261111")
         self.assertEqual(h.video_state.get("channel"), self.capture["series"])
         self.assertIn("Channel: La Revuelta", text)
-        self.assertIn("Upload date: 2026-11-10", text)
+        self.assertIn("Upload date: 2026-11-11", text)
         self.assertIn("Resolutions:", text)
         self.assertIn("Audio Codecs:", text)
         # The title should carry the S%yE%m%d prefix derived from epoch.
-        self.assertIn("S26E1110 - Santiago Abascal", text)
+        self.assertIn("S26E1111 - Santiago Abascal", text)
 
-    def test_subtitles_discovered_for_rtve(self):
-        # RTVE's extractor only exposes subtitle metadata in --print-json
-        # when --write-subs is passed; the info fetch now adds it, so the
-        # app should discover the available languages (es, en, ca, gl, eu).
+    def test_subtitles_not_discovered_for_rtve_during_info_fetch(self):
+        # The info fetch does NOT pass --write-subs (writing subtitle files
+        # during info fetch can fail on read-only file systems), so RTVE's
+        # extractor does not expose subtitle metadata in --print-json output.
+        # Subtitles are still downloaded during the actual download (the
+        # download command passes --write-subs --convert-subs srt), they are
+        # just not discovered/pre-announced in the info panel.
         h, captured, status = self._run()
         text = "\n".join(captured)
 
@@ -112,13 +115,8 @@ class TestRtvInfoParse(unittest.TestCase):
         self.assertNotIn("no audio formats", text)
         self.assertFalse(status.get("error"))
         self.assertEqual(h.video_state.get("original_title"), self.capture["title"].strip())
-        # Spanish should be among the discovered (real) subtitle languages
-        self.assertIn("Subtitles: ca (real), en (real), es (real), eu (real), gl (real)", text)
-        # Spanish and English are discovered as real (manual) tracks; German
-        # is not offered by this video so it has no checkbox. ca/eu/gl show
-        # in the output text but have no UI checkbox, so they are not in the
-        # availability dict.
-        self.assertEqual(h.video_state.get("available_subtitles"), {"en": "real", "es": "real"})
+        self.assertIn("Subtitles: None available", text)
+        self.assertEqual(h.video_state.get("available_subtitles"), {})
 
     def test_sponsorblock_skipped_for_rtve(self):
         h, captured, status = self._run()
